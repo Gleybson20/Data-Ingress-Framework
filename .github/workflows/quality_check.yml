@@ -1,0 +1,22 @@
+name: Quality Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Run Quality Check
+      run: |
+        echo "Running quality checks..."
+        # Adicione aqui os scripts para rodar os testes de qualidade, como o `great_expectations` ou outro
