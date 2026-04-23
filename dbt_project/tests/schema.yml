@@ -1,0 +1,138 @@
+version: 2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sources
+# ─────────────────────────────────────────────────────────────────────────────
+sources:
+  - name: bronze
+    database: "{{ env_var('GCP_PROJECT_ID') }}"
+    schema: bronze
+    description: "Raw data landed by ingestion/pipeline.py. Never modified after load."
+    tables:
+      - name: weather_daily
+        description: "Daily weather data per location from Open-Meteo API."
+        columns:
+          - name: date
+            description: "Calendar date of the observation."
+            tests: [not_null]
+          - name: location_id
+            description: "Stable slug identifying the geographic location."
+            tests: [not_null]
+          - name: fetched_at
+            description: "UTC timestamp when the record was extracted."
+            tests: [not_null]
+
+      - name: exchange_rates_daily
+        description: "Daily closing exchange rates from Frankfurter API."
+        columns:
+          - name: date
+            tests: [not_null]
+          - name: base_currency
+            tests: [not_null]
+          - name: target_currency
+            tests: [not_null]
+          - name: rate
+            tests: [not_null]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bronze models
+# ─────────────────────────────────────────────────────────────────────────────
+models:
+  - name: stg_weather_daily
+    description: "Bronze view: raw weather data with audit columns, no transformations."
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: location_id
+        tests: [not_null]
+      - name: fetched_at
+        tests: [not_null]
+
+  - name: stg_exchange_rates_daily
+    description: "Bronze view: raw exchange rates with audit columns."
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: base_currency
+        tests: [not_null]
+      - name: target_currency
+        tests: [not_null]
+      - name: rate
+        tests: [not_null]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Silver models
+# ─────────────────────────────────────────────────────────────────────────────
+  - name: int_weather_daily
+    description: >
+      Silver weather: deduplicated, type-safe, with derived columns
+      (temp_amplitude_c, had_rain, wind_category).
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: location_id
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['sao_paulo', 'rio_de_janeiro', 'recife', 'brasilia']
+      - name: temp_max_c
+        description: "Maximum temperature in Celsius. Can be NULL on API failure."
+      - name: temp_min_c
+        description: "Minimum temperature in Celsius."
+      - name: wind_category
+        tests:
+          - accepted_values:
+              values: ['calm', 'moderate', 'strong', 'storm', 'unknown']
+      - name: had_rain
+        tests: [not_null]
+
+    # Composite unique test — one row per (date, location) after dedup
+    tests:
+      - unique:
+          column_name: "concat(cast(date as string), '|', location_id)"
+
+  - name: int_exchange_rates_daily
+    description: >
+      Silver exchange rates: deduplicated, type-safe, with inverse_rate
+      and rate_pct_change vs previous trading day.
+    columns:
+      - name: date
+        tests: [not_null]
+      - name: base_currency
+        tests: [not_null]
+      - name: target_currency
+        tests: [not_null]
+      - name: rate
+        tests: [not_null]
+      - name: inverse_rate
+        description: "1 / rate. NULL if rate = 0 (handled by safe_divide)."
+
+    tests:
+      - unique:
+          column_name: "concat(cast(date as string), '|', base_currency, '|', target_currency)"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gold models
+# ─────────────────────────────────────────────────────────────────────────────
+  - name: fct_weather_monthly_kpis
+    description: >
+      Gold KPI table: monthly weather aggregations per location.
+      Consumed directly by Looker Studio and Power BI dashboards.
+    columns:
+      - name: month
+        tests: [not_null]
+      - name: location_id
+        tests: [not_null]
+      - name: days_with_data
+        description: "Number of days with at least one record in the Silver layer."
+        tests: [not_null]
+      - name: rain_day_pct
+        description: "Percentage of days with precipitation > 0."
+      - name: dominant_wind_category
+        tests:
+          - accepted_values:
+              values: ['calm', 'moderate', 'strong', 'storm', 'unknown']
+
+    tests:
+      - unique:
+          column_name: "concat(cast(month as string), '|', location_id)"

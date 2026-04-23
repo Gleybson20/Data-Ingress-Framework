@@ -1,0 +1,73 @@
+name: Bronze Ingestion
+
+on:
+  schedule:
+    # Runs every day at 06:00 UTC — after most international markets close
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: "Date to ingest (YYYY-MM-DD). Defaults to yesterday."
+        required: false
+        default: ""
+      dry_run:
+        description: "Set to 'true' to skip GCS upload and BQ load."
+        required: false
+        default: "false"
+
+jobs:
+  ingest:
+    name: Run Bronze Pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      id-token: write   # required for Workload Identity Federation
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Resolve target date
+        id: date
+        run: |
+          if [ -n "${{ github.event.inputs.target_date }}" ]; then
+            echo "date=${{ github.event.inputs.target_date }}" >> $GITHUB_OUTPUT
+          else
+            echo "date=$(date -d 'yesterday' '+%Y-%m-%d')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run ingestion pipeline
+        env:
+          GCP_PROJECT_ID:    ${{ secrets.GCP_PROJECT_ID }}
+          GCS_BUCKET_BRONZE: ${{ secrets.GCS_BUCKET_BRONZE }}
+          BQ_DATASET_BRONZE: bronze
+        run: |
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          python -m ingestion.pipeline --date ${{ steps.date.outputs.date }} $DRY_RUN_FLAG
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\": \":red_circle: Bronze ingestion FAILED for ${{ steps.date.outputs.date }}. Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"

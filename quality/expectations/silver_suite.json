@@ -1,0 +1,106 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "silver_suite",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.19",
+    "description": "Data contract for the Silver layer. Validates data after dbt transformation — stricter than Bronze because nulls and duplicates should have been handled by this stage.",
+    "layer": "silver",
+    "owner": "data-engineering"
+  },
+  "expectations": [
+
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "min_value": 1,
+        "max_value": 50000
+      },
+      "meta": {}
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "date" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "location_id" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "had_rain" },
+      "meta": { "notes": "had_rain is a derived boolean — never NULL in Silver." }
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "wind_category" },
+      "meta": { "notes": "wind_category always resolves to 'unknown' when source is NULL." }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "wind_category",
+        "value_set": ["calm", "moderate", "strong", "storm", "unknown"]
+      },
+      "meta": {}
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "location_id",
+        "value_set": ["sao_paulo", "rio_de_janeiro", "recife", "brasilia"]
+      },
+      "meta": {}
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "temp_amplitude_c",
+        "min_value": 0,
+        "max_value": 50,
+        "mostly": 0.99
+      },
+      "meta": { "notes": "Amplitude = max - min. Should always be non-negative." }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "rate",
+        "min_value": 0.000001,
+        "max_value": 100000,
+        "mostly": 1.0
+      },
+      "meta": { "applies_to": "int_exchange_rates_daily" }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "rate",
+        "mostly": 1.0
+      },
+      "meta": { "applies_to": "int_exchange_rates_daily" }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "rate_pct_change",
+        "min_value": -50,
+        "max_value": 50,
+        "mostly": 0.999
+      },
+      "meta": {
+        "notes": "A daily rate change outside ±50% is almost certainly an API or pipeline error. 0.1% tolerance for exotic currencies.",
+        "applies_to": "int_exchange_rates_daily"
+      }
+    }
+  ]
+}

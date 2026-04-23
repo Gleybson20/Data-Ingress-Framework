@@ -1,0 +1,112 @@
+{
+  "data_asset_type": null,
+  "expectation_suite_name": "bronze_suite",
+  "ge_cloud_id": null,
+  "meta": {
+    "great_expectations_version": "0.18.19",
+    "description": "Data contract for the Bronze layer. Validates raw data immediately after ingestion, before any dbt transformation.",
+    "layer": "bronze",
+    "owner": "data-engineering"
+  },
+  "expectations": [
+
+    {
+      "expectation_type": "expect_table_row_count_to_be_between",
+      "kwargs": {
+        "min_value": 1,
+        "max_value": 10000
+      },
+      "meta": { "notes": "Bronze table must have at least 1 row per daily run." }
+    },
+
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "date" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_to_exist",
+      "kwargs": { "column": "fetched_at" },
+      "meta": {}
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "date" },
+      "meta": {}
+    },
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "fetched_at" },
+      "meta": {}
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_match_regex",
+      "kwargs": {
+        "column": "date",
+        "regex": "^\\d{4}-\\d{2}-\\d{2}$"
+      },
+      "meta": { "notes": "Date must be in ISO 8601 format YYYY-MM-DD." }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": {
+        "column": "location_id",
+        "value_set": ["sao_paulo", "rio_de_janeiro", "recife", "brasilia"]
+      },
+      "meta": {
+        "notes": "Only pre-approved locations are expected in the Bronze weather table.",
+        "applies_to": "weather_daily"
+      }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "temp_max_c",
+        "min_value": -20,
+        "max_value": 60,
+        "mostly": 0.99
+      },
+      "meta": {
+        "notes": "Temperature outside -20°C to 60°C is almost certainly a data error. 1% tolerance for API anomalies.",
+        "applies_to": "weather_daily"
+      }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": {
+        "column": "rate",
+        "min_value": 0.000001,
+        "max_value": 100000,
+        "mostly": 1.0
+      },
+      "meta": {
+        "notes": "Exchange rate must be a positive number.",
+        "applies_to": "exchange_rates_daily"
+      }
+    },
+
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": {
+        "column": "rate",
+        "mostly": 1.0
+      },
+      "meta": { "applies_to": "exchange_rates_daily" }
+    },
+
+    {
+      "expectation_type": "expect_column_proportion_of_unique_values_to_be_between",
+      "kwargs": {
+        "column": "fetched_at",
+        "min_value": 0.0,
+        "max_value": 1.0
+      },
+      "meta": { "notes": "Sanity check — fetched_at should not be a constant." }
+    }
+  ]
+}

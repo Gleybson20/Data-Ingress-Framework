@@ -1,22 +1,60 @@
-name: Quality Check
+name: Data Quality Check
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["Bronze Ingestion"]
+    types: [completed]
 
 jobs:
-  quality-check:
+  quality:
+    name: Great Expectations Validation
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    timeout-minutes: 15
 
-    - name: Run Quality Check
-      run: |
-        echo "Running quality checks..."
-        # Adicione aqui os scripts para rodar os testes de qualidade, como o `great_expectations` ou outro
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Validate Bronze expectations
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          python -c "
+          import great_expectations as gx
+          import json, os
+
+          context = gx.get_context()
+          suite_path = 'quality/expectations/bronze_suite.json'
+          with open(suite_path) as f:
+              suite_config = json.load(f)
+
+          results = context.run_checkpoint(checkpoint_name='bronze_checkpoint')
+          if not results['success']:
+              raise SystemExit('Great Expectations validation FAILED for Bronze layer.')
+          print('Bronze validation passed.')
+          "
+
+      - name: Notify on quality failure
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\": \":warning: Data quality check FAILED. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
