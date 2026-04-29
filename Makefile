@@ -1,130 +1,109 @@
 .DEFAULT_GOAL := help
-PYTHON        := python3.11
-VENV          := .venv
-PIP           := $(VENV)/bin/pip
-DBT           := $(VENV)/bin/dbt
-PYTEST        := $(VENV)/bin/pytest
+PYTHON  := python
+VENV    := .venv
+PIP     := $(VENV)/Scripts/pip
+DBT     := $(VENV)/Scripts/dbt
+PYTEST  := $(VENV)/Scripts/pytest
 
 .PHONY: install
-install: ## Create virtual environment and install all dependencies
+install: ## Cria o ambiente virtual e instala as dependências
 	$(PYTHON) -m venv $(VENV)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
-	@echo "\n✅ Environment ready. Activate with: source $(VENV)/bin/activate"
+	@echo "Ambiente pronto. Ative com: .venv\\Scripts\\activate"
 
 .PHONY: env
-env: ## Copy .env.example to .env (only if .env doesn't exist yet)
-	@[ -f .env ] && echo "⚠️  .env already exists — skipping." || (cp .env.example .env && echo "✅ .env created. Fill in your credentials.")
+env: ## Copia .env.example para .env (somente se .env não existir)
+	@if not exist .env (copy .env.example .env && echo .env criado.) else (echo .env ja existe.)
 
 .PHONY: run
-run: ## Run the ingestion pipeline for yesterday (reads .env automatically)
-	@export $$(grep -v '^#' .env | xargs) && \
+run: ## Ingere dados de ontem no DuckDB
 	$(PYTHON) -m ingestion.pipeline
 
 .PHONY: run-date
-run-date: ## Run pipeline for a specific date: make run-date DATE=2024-06-01
-	@[ -n "$(DATE)" ] || (echo "❌ Usage: make run-date DATE=YYYY-MM-DD" && exit 1)
-	@export $$(grep -v '^#' .env | xargs) && \
+run-date: ## Ingere dados de uma data específica: make run-date DATE=2024-06-01
 	$(PYTHON) -m ingestion.pipeline --date $(DATE)
 
 .PHONY: dry-run
-dry-run: ## Run pipeline without writing to GCS or BigQuery (safe for local testing)
-	@export $$(grep -v '^#' .env | xargs) && \
+dry-run: ## Testa os conectores sem salvar nada em disco
 	$(PYTHON) -m ingestion.pipeline --dry-run
 
 .PHONY: test
-test: ## Run full test suite with coverage report
-	$(PYTEST) tests/ -v --tb=short \
-		--cov=ingestion \
-		--cov-report=term-missing \
-		--cov-report=html:.coverage-report
+test: ## Roda todos os testes com relatório de cobertura
+	$(PYTEST) tests/ -v --tb=short --cov=ingestion --cov-report=term-missing
 
 .PHONY: test-connectors
-test-connectors: ## Run only connector tests (fast, no network calls)
-	$(PYTEST) tests/ingestion/connectors/ -v --tb=short
+test-connectors: ## Roda apenas os testes de conectores
+	$(PYTEST) tests/ -v --tb=short -k "connector"
 
 .PHONY: test-ci
-test-ci: ## Run tests in CI mode (no coverage HTML, fail fast)
+test-ci: ## Modo CI: para na primeira falha, sem HTML
 	$(PYTEST) tests/ -v --tb=short -x
 
 .PHONY: dbt-deps
-dbt-deps: ## Install dbt packages (dbt deps)
+dbt-deps: ## Instala pacotes dbt
 	cd dbt_project && $(DBT) deps
 
 .PHONY: dbt-run
-dbt-run: ## Run all dbt models (bronze → silver → gold)
-	@export $$(grep -v '^#' .env | xargs) && \
+dbt-run: ## Executa todos os modelos dbt (bronze → silver → gold)
 	cd dbt_project && $(DBT) run --profiles-dir .
 
 .PHONY: dbt-test
-dbt-test: ## Run all dbt tests (schema + singular)
-	@export $$(grep -v '^#' .env | xargs) && \
+dbt-test: ## Executa todos os testes dbt
 	cd dbt_project && $(DBT) test --profiles-dir .
 
 .PHONY: dbt-build
-dbt-build: ## dbt run + dbt test in a single command
-	@export $$(grep -v '^#' .env | xargs) && \
+dbt-build: ## dbt run + dbt test em sequência
 	cd dbt_project && $(DBT) build --profiles-dir .
 
 .PHONY: dbt-docs
-dbt-docs: ## Generate and serve dbt docs on http://localhost:8080
-	@export $$(grep -v '^#' .env | xargs) && \
-	cd dbt_project && $(DBT) docs generate --profiles-dir . && \
-	$(DBT) docs serve --port 8080 --profiles-dir .
+dbt-docs: ## Gera e serve a documentação em http://localhost:8080
+	cd dbt_project && $(DBT) docs generate --profiles-dir . && $(DBT) docs serve --port 8080 --profiles-dir .
 
 .PHONY: dbt-lint
-dbt-lint: ## Compile all models to catch syntax errors without running them
-	@export $$(grep -v '^#' .env | xargs) && \
+dbt-lint: ## Verifica sintaxe dos modelos sem executar
 	cd dbt_project && $(DBT) compile --profiles-dir .
 
-.PHONY: docker-build
-docker-build: ## Build the Docker image
-	docker build -f docker/Dockerfile -t raw-to-gold:local .
+.PHONY: query-bronze
+query-bronze: ## Mostra os últimos registros do Bronze no terminal
+	$(PYTHON) -c "import duckdb; con = duckdb.connect('./data/warehouse.duckdb'); print('\n=== weather_daily ==='); print(con.execute('SELECT * FROM bronze.weather_daily ORDER BY date DESC LIMIT 5').df()); print('\n=== exchange_rates_daily ==='); print(con.execute('SELECT * FROM bronze.exchange_rates_daily ORDER BY date DESC LIMIT 5').df())"
 
-.PHONY: docker-run
-docker-run: ## Run the pipeline inside Docker (uses local .env file)
-	docker run --rm --env-file .env raw-to-gold:local
+.PHONY: query-silver
+query-silver: ## Mostra os últimos registros do Silver no terminal
+	$(PYTHON) -c "import duckdb; con = duckdb.connect('./data/warehouse.duckdb'); print('\n=== int_weather_daily ==='); print(con.execute('SELECT * FROM silver.int_weather_daily ORDER BY date DESC LIMIT 5').df()); print('\n=== int_exchange_rates_daily ==='); print(con.execute('SELECT * FROM silver.int_exchange_rates_daily ORDER BY date DESC LIMIT 5').df())"
 
-.PHONY: docker-dry-run
-docker-dry-run: ## Run the pipeline inside Docker in dry-run mode
-	docker run --rm --env-file .env raw-to-gold:local --dry-run
-
-.PHONY: tf-init
-tf-init: ## Initialize Terraform (downloads providers)
-	cd terraform && terraform init
-
-.PHONY: tf-plan
-tf-plan: ## Show Terraform plan without applying changes
-	cd terraform && terraform plan -var="gcp_project_id=$$(grep GCP_PROJECT_ID .env | cut -d= -f2)"
-
-.PHONY: tf-apply
-tf-apply: ## Apply Terraform changes (creates GCS buckets and BQ tables)
-	cd terraform && terraform apply -var="gcp_project_id=$$(grep GCP_PROJECT_ID .env | cut -d= -f2)"
+.PHONY: query-gold
+query-gold: ## Mostra os KPIs Gold no terminal
+	$(PYTHON) -c "import duckdb; con = duckdb.connect('./data/warehouse.duckdb'); print('\n=== fct_weather_monthly_kpis ==='); print(con.execute('SELECT * FROM gold.fct_weather_monthly_kpis ORDER BY month DESC LIMIT 5').df()); print('\n=== fct_exchange_rates_monthly_kpis ==='); print(con.execute('SELECT * FROM gold.fct_exchange_rates_monthly_kpis ORDER BY month DESC LIMIT 5').df())"
 
 .PHONY: lint
-lint: ## Run ruff linter across the codebase
-	$(VENV)/bin/ruff check ingestion/ tests/
+lint: ## Verifica estilo e bugs com ruff
+	$(VENV)/Scripts/ruff check ingestion/ tests/
 
 .PHONY: format
-format: ## Format code with ruff formatter
-	$(VENV)/bin/ruff format ingestion/ tests/
+format: ## Formata o código automaticamente
+	$(VENV)/Scripts/ruff format ingestion/ tests/
 
 .PHONY: typecheck
-typecheck: ## Run mypy static type checker
-	$(VENV)/bin/mypy ingestion/ --ignore-missing-imports
-
+typecheck: ## Verifica tipos estáticos com mypy
+	$(VENV)/Scripts/mypy ingestion/ --ignore-missing-imports
 
 .PHONY: clean
-clean: ## Remove virtual environment, cache files and coverage reports
-	rm -rf $(VENV) .coverage .coverage-report __pycache__ .mypy_cache .ruff_cache
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete
+clean: ## Remove ambiente virtual, caches e relatórios
+	if exist $(VENV) rmdir /s /q $(VENV)
+	if exist .coverage del .coverage
+	if exist .coverage-report rmdir /s /q .coverage-report
+	for /d /r . %%d in (__pycache__) do @if exist "%%d" rmdir /s /q "%%d"
+
+.PHONY: clean-data
+clean-data: ## Apaga todos os dados gerados (NDJSON + DuckDB)
+	if exist data rmdir /s /q data
+	@echo "Pasta data/ removida."
 
 .PHONY: help
-help: ## Show this help message
-	@echo ""
-	@echo "raw-to-gold-pipeline — available commands:"
-	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36mmake %-20s\033[0m %s\n", $$1, $$2}'
-	@echo ""
+help: ## Mostra esta mensagem de ajuda
+	@echo.
+	@echo raw-to-gold-pipeline (DuckDB) - comandos disponíveis:
+	@echo.
+	@grep -E "^[a-zA-Z_-]+:.*?## .*$$" $(MAKEFILE_LIST) | awk "BEGIN {FS = \":.*?## \"}; {printf \"  make %-20s %s\n\", $$1, $$2}"
+	@echo.

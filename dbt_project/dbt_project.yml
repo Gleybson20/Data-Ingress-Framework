@@ -1,0 +1,28 @@
+name: raw_to_gold
+version: "1.0.0"
+config-version: 2
+
+profile: raw_to_gold
+
+model-paths:  ["models"]
+macro-paths:  ["macros"]
+test-paths:   ["tests"]
+docs-paths:   ["docs"]
+
+target-path:  "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  raw_to_gold:
+    bronze:
+      +materialized: view
+      +schema: bronze
+      +tags: ["bronze"]
+    silver:
+      +materialized: incremental
+      +schema: silver
+      +tags: ["silver"]
+    gold:
+      +materialized: table
+      +schema: gold
+      +tags: ["gold"]

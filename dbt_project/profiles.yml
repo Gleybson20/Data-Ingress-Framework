@@ -1,35 +1,7 @@
-# dbt_project/profiles.yml
-# --------------------------
-# dbt connection profiles for local development.
-# In CI/CD (GitHub Actions), Workload Identity Federation is used instead —
-# no key file is needed and this file is not referenced.
-#
-# DO NOT commit real credentials here. This file uses environment variables
-# from your .env file, loaded via `make dbt-run` or `export $(cat ../.env)`.
-#
-# Docs: https://docs.getdbt.com/docs/core/connect-data-platform/bigquery-setup
-
 raw_to_gold:
   target: dev
   outputs:
-
     dev:
-      type: bigquery
-      method: service-account
-      project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: dbt_dev_{{ env_var('USER', 'local') }}   # isolated dev dataset per engineer
-      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
-      location: US
-      timeout_seconds: 300
-      retries: 3
+      type: duckdb
+      path: ../data/warehouse.duckdb
       threads: 4
-
-    prod:
-      type: bigquery
-      method: oauth                                      # uses Workload Identity in CI
-      project: "{{ env_var('GCP_PROJECT_ID') }}"
-      dataset: bronze                                    # dbt writes to the correct dataset per model config
-      location: US
-      timeout_seconds: 600
-      retries: 5
-      threads: 8
