@@ -1,42 +1,12 @@
-"""
-ingestion/auth/token_manager.py
---------------------------------
-OAuth2 client-credentials token manager with automatic renewal.
-
-Handles:
-  - Initial token acquisition via client_credentials grant
-  - In-memory caching with expiry buffer
-  - Thread-safe renewal using a lock
-  - Structured logging for every token lifecycle event
-
-Usage
------
-    manager = TokenManager(
-        token_url="https://auth.example.com/oauth/token",
-        client_id=os.environ["CLIENT_ID"],
-        client_secret=os.environ["CLIENT_SECRET"],
-        scope="read:data",
-    )
-    headers = {"Authorization": f"Bearer {manager.get_token()}"}
-
-Note: The public connectors (Open-Meteo, Frankfurter) do not require OAuth2.
-This module is used for any future connector that targets a protected API.
-"""
-
 from __future__ import annotations
-
 import logging
 import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
-
 import requests
 
 logger = logging.getLogger(__name__)
-
-# Seconds before actual expiry to trigger proactive renewal.
-# Avoids race conditions where a token expires mid-request.
 _EXPIRY_BUFFER_SECONDS: int = 60
 
 

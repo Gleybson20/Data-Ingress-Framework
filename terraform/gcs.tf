@@ -1,8 +1,3 @@
-# terraform/gcs.tf
-# ------------------
-# GCS buckets for raw file storage, one per medallion layer.
-# Bronze bucket is the source of truth for all BQ load jobs.
-
 resource "google_storage_bucket" "bronze" {
   name          = "${var.gcp_project_id}-bronze-raw"
   location      = "US"
@@ -11,13 +6,11 @@ resource "google_storage_bucket" "bronze" {
   uniform_bucket_level_access = true
 
   versioning {
-    enabled = true  # keeps previous versions for auditability
+    enabled = true
   }
 
   lifecycle_rule {
     action { type = "Delete" }
-    # Raw files older than 365 days are deleted to control storage costs.
-    # BigQuery remains the queryable record — GCS is the landing zone only.
     condition { age = 365 }
   }
 

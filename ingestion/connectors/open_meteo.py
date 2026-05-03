@@ -76,7 +76,6 @@ _DAILY_VARIABLES: list[str] = [
     "wind_direction_10m_dominant",
 ]
 
-# Maps Open-Meteo field names → our schema column names
 _FIELD_MAP: dict[str, str] = {
     "temperature_2m_max":            "temp_max_c",
     "temperature_2m_min":            "temp_min_c",
@@ -130,7 +129,7 @@ class OpenMeteoConnector(BaseConnector):
             ConnectorError : If the API returns unexpected data or all retries
                              are exhausted.
         """
-        date_str = target_date.isoformat()  # "YYYY-MM-DD"
+        date_str = target_date.isoformat()
         records: list[dict[str, Any]] = []
         failures: list[str] = []
 
@@ -147,7 +146,6 @@ class OpenMeteoConnector(BaseConnector):
                 )
                 failures.append(location.id)
 
-        # Raise if every location failed (total extraction failure)
         if failures and len(failures) == len(self._locations):
             raise ConnectorError(
                 self.source_name,
@@ -238,7 +236,7 @@ class OpenMeteoConnector(BaseConnector):
                 f"Empty 'daily.time' array for location '{location.id}' on {date_str}.",
             )
 
-        idx = 0  # single-date request → always index 0
+        idx = 0
 
         record: dict[str, Any] = {
             "date":          dates[idx],

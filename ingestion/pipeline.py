@@ -21,7 +21,6 @@ Estrutura local gerada
 """
 
 from __future__ import annotations
-
 import json
 import logging
 import os
@@ -30,9 +29,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-
 import duckdb
-
 from ingestion.connectors.base_connector import BaseConnector, ConnectorError, ConnectorResult
 from ingestion.connectors.exchange_rates import ExchangeRatesConnector
 from ingestion.connectors.open_meteo import OpenMeteoConnector
@@ -191,7 +188,6 @@ class BronzePipeline:
 
         date_str   = self._target_date.isoformat()
         full_table = f"bronze.{table_name}"
-        # Barra invertida não funciona no DuckDB — normaliza para forward slash
         path_str   = str(file_path).replace("\\", "/")
 
         con = duckdb.connect(str(self._db_path))

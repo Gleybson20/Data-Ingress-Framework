@@ -214,7 +214,7 @@ class BaseConnector(abc.ABC):
             backoff_factor=self._retry_cfg.backoff_factor,
             status_forcelist=list(self._retry_cfg.status_forcelist),
             allowed_methods=list(self._retry_cfg.allowed_methods),
-            raise_on_status=False,  # we raise manually for richer error messages
+            raise_on_status=False,
         )
         adapter = HTTPAdapter(max_retries=retry)
         session.mount("https://", adapter)

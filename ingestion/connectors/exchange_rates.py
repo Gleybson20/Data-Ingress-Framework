@@ -24,18 +24,14 @@ BigQuery target schema
 """
 
 from __future__ import annotations
-
 import logging
 from datetime import date, datetime, timezone
 from typing import Any
-
 from ingestion.connectors.base_connector import BaseConnector, ConnectorError, ConnectorResult
 
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://api.frankfurter.app"
-
-# Default set of currencies to track (ISO 4217 codes)
 DEFAULT_BASE_CURRENCY: str = "USD"
 DEFAULT_TARGET_CURRENCIES: list[str] = ["BRL", "EUR", "GBP", "JPY", "CAD", "AUD"]
 
@@ -79,7 +75,6 @@ class ExchangeRatesConnector(BaseConnector):
         self._base_currency = base_currency.upper()
         self._target_currencies = [c.upper() for c in (target_currencies or DEFAULT_TARGET_CURRENCIES)]
 
-        # Frankfurter rejects the base currency in the target list
         if self._base_currency in self._target_currencies:
             self._target_currencies.remove(self._base_currency)
             logger.debug(
@@ -115,8 +110,6 @@ class ExchangeRatesConnector(BaseConnector):
         payload = self._call_api(date_str)
         returned_date = payload.get("date")
 
-        # Frankfurter silently shifts to the nearest trading day on weekends
-        # and holidays. We record the actual date returned for auditability.
         if returned_date and returned_date != date_str:
             logger.info(
                 "[%s] Requested %s but API returned %s (nearest trading day).",
@@ -219,7 +212,7 @@ class ExchangeRatesConnector(BaseConnector):
         for target_currency, rate in rates.items():
             parsed_rate = self._safe_rate(rate, target_currency)
             if parsed_rate is None:
-                continue  # skip unparseable rates; warning already logged
+                continue
 
             records.append(
                 {
@@ -231,7 +224,6 @@ class ExchangeRatesConnector(BaseConnector):
                 }
             )
 
-        # Warn about any requested currencies not returned
         missing = set(self._target_currencies) - set(rates.keys())
         if missing:
             logger.warning(

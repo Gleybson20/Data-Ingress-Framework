@@ -8,7 +8,6 @@ terraform {
     }
   }
 
-  # Remote state in GCS — prevents state conflicts in CI/CD
   backend "gcs" {
     bucket = "tf-state-raw-to-gold"
     prefix = "terraform/state"
